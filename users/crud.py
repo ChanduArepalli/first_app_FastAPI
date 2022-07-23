@@ -45,6 +45,40 @@ def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None
     return encoded_jwt
 
 
+def create_refresh_token(data: dict, expires_delta: Union[timedelta, None] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire, "token_type": "refresh"})
+    encoded_jwt = jwt.encode(to_encode, "REFRESH-TOKEN"+settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+
+def create_access_token_with_refresh_token(refresh_token:str, expires_delta: Union[timedelta, None] = None):
+    credentials_exception = HTTPException(
+        status_code=400,
+        detail="Invalid token",
+    )
+    try:
+        payload = jwt.decode(refresh_token, "REFRESH-TOKEN"+settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username: str = payload.get("username")
+        print(payload)
+        if username is None:
+            raise credentials_exception
+        to_encode = payload.copy()
+        if expires_delta:
+            expire = datetime.utcnow() + expires_delta
+        else:
+            expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        to_encode.update({"exp": expire})
+        encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+        return encoded_jwt
+    except JWTError:
+        raise credentials_exception
+
+
 async def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

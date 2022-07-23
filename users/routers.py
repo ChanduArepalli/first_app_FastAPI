@@ -6,14 +6,14 @@ from config.database import get_db
 
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from .models import User
-from .schemas import LoginSchema, UserOut, Token
-from .crud import create_user, get_user_by_username, verify_password, create_access_token, get_current_user
+from .schemas import LoginSchema, UserOut, Token, AccessToken
+from .crud import (create_user, get_user_by_username, verify_password, create_access_token, get_current_user, create_refresh_token, create_access_token_with_refresh_token)
 from config.schemas import Message
 from config import settings
 
 router = APIRouter(
-    prefix="/users",
-    tags=["users"],
+    prefix="",
+    tags=["Authentication"],
     responses={404: {"message": "Not found"}},
 )
 
@@ -41,7 +41,7 @@ def login(user: LoginSchema, response: Response, db: Session=Depends(get_db)):
     return _user
 
 
-@router.post('/token', tags=['token'])
+@router.post('/token', tags=['Token'])
 async def login_for_access_token(response: Response, db: Session=Depends(get_db),form_data: OAuth2PasswordRequestForm = Depends()):
     _user = get_user_by_username(db, form_data.username)
     if not _user:
@@ -61,8 +61,15 @@ async def login_for_access_token(response: Response, db: Session=Depends(get_db)
     access_token = create_access_token(
         data={"username": _user.username}, expires_delta=access_token_expires
     )
-    return {"access_token": str(access_token), "token_type": "bearer"}
 
+    refresh_token = create_refresh_token(data={"username": _user.username})
+    return {"access_token": str(access_token), "token_type": "bearer", 'refresh_token': str(refresh_token)}
+
+
+@router.post('/token/refresh',tags=['Token'], response_model=Union[AccessToken])
+def refresh(refresh_token: str, response: Response, db: Session=Depends(get_db)):
+    access_token = create_access_token_with_refresh_token(refresh_token)
+    return {"access_token": str(access_token)}
 
 
 @router.post('/profile', response_model=Union[UserOut])
